@@ -1,37 +1,62 @@
 #!/bin/bash
 
-# Install dependencies using snap where possible
+# Function to install dependencies on Linux
 install_dependencies_linux() {
-    # Update package list and install curl
-    sudo apt-get update
-    sudo apt-get install -y ca-certificates curl
-
-    # Install snap if it's not installed
-    if ! command -v snap &> /dev/null; then
-        echo "Snap is not installed. Installing snap..."
-        sudo apt-get install -y snapd
+    # Detect the package manager
+    if command -v apt-get &>/dev/null; then
+        PACKAGE_MANAGER="apt-get"
+    elif command -v yum &>/dev/null; then
+        PACKAGE_MANAGER="yum"
+    elif command -v dnf &>/dev/null; then
+        PACKAGE_MANAGER="dnf"
+    elif command -v pacman &>/dev/null; then
+        PACKAGE_MANAGER="pacman"
+    else
+        echo "Unsupported package manager."
+        exit 1
     fi
 
-    # Install Docker using snap
+    # Install Snap if not installed
+    if ! command -v snap &>/dev/null; then
+        echo "Snap is not installed. Installing snap..."
+        case $PACKAGE_MANAGER in
+            apt-get)
+                sudo apt-get update
+                sudo apt-get install -y snapd
+                ;;
+            yum)
+                sudo yum install -y epel-release
+                sudo yum install -y snapd
+                ;;
+            dnf)
+                sudo dnf install -y snapd
+                ;;
+            pacman)
+                sudo pacman -Sy snapd
+                sudo systemctl enable --now snapd.socket
+                sudo ln -s /var/lib/snapd/snap /snap
+                ;;
+        esac
+        sudo systemctl enable --now snapd.socket
+    fi
+
+    # Install Docker
     echo "Installing Docker..."
     sudo snap install docker
-
-    # Ensure Docker is started and enabled
-    sudo systemctl enable --now snap.docker.dockerd
 
     # Install Docker Compose
     echo "Installing Docker Compose..."
     sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
     sudo chmod +x /usr/local/bin/docker-compose
 
+    # Install Node.js and NVM
     echo "Installing Node.js and NVM..."
     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-    source ~/.bashrc
     export NVM_DIR="$HOME/.nvm"
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
     [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
     nvm install 20
-    npm i -g localtunnel
+    npm install -g localtunnel
 
     # Add user to the docker group and apply permissions
     sudo groupadd docker
@@ -39,33 +64,22 @@ install_dependencies_linux() {
     newgrp docker
 }
 
+# Function to install dependencies on Mac
 install_dependencies_mac() {
-    brew install curl
-    brew install gpg
-
-    # Install Docker using brew
-    echo "Installing Docker..."
+    echo "Installing Homebrew..."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    brew install curl gpg
     brew install --cask docker
-    open /Applications/Docker.app
-
-    # Install Docker Compose
-    echo "Installing Docker Compose..."
-    curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-    chmod +x /usr/local/bin/docker-compose
-
-    echo "Installing Node.js and NVM..."
+    brew install docker-compose
     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
     export NVM_DIR="$HOME/.nvm"
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
     [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
     nvm install 20
-    npm i -g localtunnel
-
-    # Add user to the docker group and apply permissions
-    sudo dscl . create /Groups/docker
-    sudo dscl . append /Groups/docker GroupMembership $(whoami)
+    npm install -g localtunnel
 }
 
+# Detect operating system and install dependencies
 if [[ $(uname) == 'Linux' ]]; then
     install_dependencies_linux
 elif [[ $(uname) == 'Darwin' ]]; then
@@ -83,10 +97,10 @@ TUNNEL_SERVICE="lt"
 # Change to the project directory
 cd "$PROJECT_DIR" || exit
 nvm use 20
-npm i
+npm install
 
 # Build and start the Next.js app
-echo "Installing dependencies..."
+echo "Installing Dependencies"
 echo "Building and starting Next.js app..."
 pkill node
 pkill geniuslm
@@ -97,8 +111,6 @@ npx next start -p "$PORT" &
 
 # Wait for the Next.js app to start
 sleep 3
-
-# Install the tunnel service if not installed
 echo "Exposing local port $PORT using $TUNNEL_SERVICE..."
 lt --port "$PORT" > /tmp/lt.log 2>&1 &
 
