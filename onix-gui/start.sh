@@ -94,6 +94,16 @@ PROJECT_DIR="GUI"
 PORT=3005
 TUNNEL_SERVICE="lt"
 
+# Function to kill processes running on a specific port
+kill_processes_on_port() {
+    local port=$1
+    echo "Killing processes running on port $port..."
+    lsof -ti :$port | xargs kill -9
+}
+
+# Kill processes running on the specified port
+kill_processes_on_port $PORT
+
 # Change to the project directory
 cd "$PROJECT_DIR" || exit
 nvm use 20
